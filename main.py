@@ -1,3 +1,8 @@
+"""
+关注公众号: Ctp接口量化
+
+"""
+
 from Ctpapi import *
 
 class MACDStrategy(Strategy):
