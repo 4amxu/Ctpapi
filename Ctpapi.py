@@ -10,9 +10,6 @@ import time
 import os, os.path
 import random
 import json
-from urllib import request
-import threading
-from ta import *
 class BarType():
     """时间类型:秒,分,时,日,周,月,年"""
     """3秒"""
@@ -34,17 +31,7 @@ class BarType():
     '''30分钟'''
     Min30 = 1800
     '''60分钟'''
-    Min60 = 3600
-    '''日'''
-    Day = 14000
-    '''周'''
-    Week = 4
-    '''月'''
-    Month = 5
-    '''年'''
-    Year = 6
- 
- 
+    Min60 = 3600 
     def __int__(self):
         """return int value"""
         return self.value        
@@ -84,7 +71,7 @@ class DirectionType():
 
 class TdSpi(tdapi.CThostFtdcTraderSpi):
     # 继承重写c++的tdapi方法，交易连接
-    def __init__(self, setting, BaseGateway):
+    def __init__(self, setting):
         tdapi.CThostFtdcTraderSpi.__init__(self)
         self.userid = setting["userid"]
         self.password = setting["password"]
@@ -94,7 +81,6 @@ class TdSpi(tdapi.CThostFtdcTraderSpi):
         self.appid = setting["appid"]
         self.auth_code = setting["auth_code"]
         self.product_info = setting["product_info"]
-        self.Gateway = BaseGateway
         self.reqID = 0              # 操作请求编号
         self.OrderRefID = random.randrange(start=1000,stop=9000,step=random.randint(10,100)  )           # 订单编号
         self.login = False
@@ -103,6 +89,7 @@ class TdSpi(tdapi.CThostFtdcTraderSpi):
         self.positionCache = {}
         self.account = {}
         self.contract = {}
+        self.orderList = []
         self.api = self.create()
         self.connect()
     def create(self):
@@ -124,7 +111,7 @@ class TdSpi(tdapi.CThostFtdcTraderSpi):
             obj.BrokerID = self.brokerid
             obj.UserID = self.userid
             obj.Password = self.password
-            obj.UserProductInfo = "python dll"
+            obj.UserProductInfo = self.product_info
             self.api.ReqUserLogin(obj, 0)
         else:
             print('认证错误 {}'.format(pRspInfo.ErrorMsg))
@@ -196,20 +183,16 @@ class TdSpi(tdapi.CThostFtdcTraderSpi):
         amount = pTrade.Volume
         if pTrade.Direction == '0' and pTrade.OffsetFlag == '0':			
             offset = "买开"
-            # side = "Buy"
         elif pTrade.Direction == '1' and pTrade.OffsetFlag =='3' or pTrade.Direction == '1' and pTrade.OffsetFlag == '4' or pTrade.Direction == '1' and pTrade.OffsetFlag == '1':
             offset = "买平"
-            # side = "Sell"
+
         elif pTrade.Direction == '1' and pTrade.OffsetFlag == '0':
             offset = "卖开"
-            # side = "Short"
+
         elif pTrade.Direction == '0' and pTrade.OffsetFlag == '3' or pTrade.Direction == '0' and pTrade.OffsetFlag == '4' or pTrade.Direction == '0' and pTrade.OffsetFlag == '1':
             offset = "卖平"
-            # side = "Cover"
-        LL ={'symbol':code,'volume':amount,'price':price,'Direction':side,'offset':offset}
-        # print(LL)
-        self.Gateway.on_trade({"合约":code,"盈亏":0,"持仓成本":0,"今仓":0,"昨仓":0,"方向":offset,"开仓价":price,"总持仓":amount,"止损":0,"止盈":0,"移动止损":0})
-        self.Gateway.position = []
+
+        print({'symbol':code,'volume':amount,'price':price,'Direction':side,'offset':offset})
         self.qryPosition()
 
     def OnRspOrderInsert(self, pInputOrder: 'CThostFtdcInputOrderField', pRspInfo: 'CThostFtdcRspInfoField', nRequestID: 'int', bIsLast: 'bool'):
@@ -265,15 +248,11 @@ class TdSpi(tdapi.CThostFtdcTraderSpi):
                 self.position['开仓价'] = self.position['持仓成本']/(self.position['size']*self.position['总持仓'])
                 self.position['昨仓'] = self.position['总持仓']-self.position['今仓']
                 self.position['合约'] = self.position.index
-                position=self.position.to_dict(orient='records')
-                self.Gateway.position = position
-                self.positionCache.clear()
                 print(self.position)
+                self.positionCache.clear()
                 self.position = None
-                # print(self.Gateway.position)
             else:
                 print("没有持仓")
-                # self.Gateway.position = []
 
     def OnRspQryTradingAccount(self, pTradingAccount: 'CThostFtdcTradingAccountField', pRspInfo: 'CThostFtdcRspInfoField', nRequestID: 'int', bIsLast: 'bool'):
         # 账户查询反馈
@@ -302,19 +281,7 @@ class TdSpi(tdapi.CThostFtdcTraderSpi):
             print(self.contract)
             self.lock = False
             self.qryPosition()
-    def connect(self):
-        # 连接
-        self.api.RegisterFront(self.td_address)
-        self.api.RegisterSpi(self)
-        self.api.SubscribePrivateTopic(tdapi.THOST_TERT_QUICK)
-        self.api.SubscribePublicTopic(tdapi.THOST_TERT_QUICK)				
-        self.api.Init()
-        self.Gateway.setTraderSpi(self)
-
     def send(self, symbol, Direction, Offset, Price, volume, PriceType):
-        # 下单，简单化处理
-        if self.lock==True:
-            time.sleep(0.1)
         self.reqID += 1
         self.OrderRefID += 1
         obj = tdapi.CThostFtdcInputOrderField()
@@ -358,7 +325,6 @@ class TdSpi(tdapi.CThostFtdcTraderSpi):
             obj.LimitPrice = Price
             obj.VolumeCondition = tdapi.THOST_FTDC_VC_CV  # 全部数量
         self.api.ReqOrderInsert(obj,self.reqID)
-        self.lock==True	  
         return str(self.OrderRefID) # 报单编号
     def qryInstrument(self):
         # 查询合约
@@ -378,15 +344,19 @@ class TdSpi(tdapi.CThostFtdcTraderSpi):
             time.sleep(0.1)
         obj = tdapi.CThostFtdcQryTradingAccountField()
         self.api.ReqQryTradingAccount(obj, 0)
+    def connect(self):
+        # 连接
+        self.api.RegisterFront(self.td_address)
+        self.api.RegisterSpi(self)
+        self.api.SubscribePrivateTopic(tdapi.THOST_TERT_QUICK)
+        self.api.SubscribePublicTopic(tdapi.THOST_TERT_QUICK)				
+        self.api.Init()
     def __del__(self):
         self.api.RegisterSpi(None)
         self.api.Release()
 
-
-
 class MdSpi(mdapi.CThostFtdcMdSpi):
-
-    def __init__(self,setting,BaseGateway):
+    def __init__(self,setting):
         mdapi.CThostFtdcMdSpi.__init__(self)
         # super().__init__()
         self.userid = setting["userid"]
@@ -398,8 +368,8 @@ class MdSpi(mdapi.CThostFtdcMdSpi):
         self.auth_code = setting["auth_code"]
         self.product_info = setting["product_info"]
         self.reqid = 0
-        self.Gateway = BaseGateway
         self.nest = {}
+        self.Renko = {}
         self.api = self.create()
         self.connect()
     def create(self):
@@ -407,52 +377,6 @@ class MdSpi(mdapi.CThostFtdcMdSpi):
         if not os.path.exists(mdpath):
             os.makedirs(mdpath)
         return mdapi.CThostFtdcMdApi_CreateFtdcMdApi(mdpath)
-    def Bar(self, tick, granularity = 30):
-        instrument_id = tick.InstrumentID
-        action_day = tick.ActionDay
-        update_time = tick.UpdateTime.replace(':', '')
-     
-        last_price = tick.LastPrice
-     
-        volume = tick.Volume
-     
-        if update_time.find('.') != -1:
-            dt = datetime.strptime(' '.join([action_day, update_time]), "%Y%m%d %H%M%S.%f")
-            timestamp = time.mktime(dt.timetuple()) + (dt.microsecond / 1e6)
-     
-        else:
-            timestamp = int(time.mktime(time.strptime(' '.join([action_day, update_time]), "%Y%m%d %H%M%S")))
-     
-        date_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
-        remainder = timestamp % granularity
-
-        if instrument_id not in self.nest:
-            self.nest[instrument_id] = {
-                'Date': date_time,
-                'Open': last_price,
-                'High': last_price,
-                'Low': last_price,
-                'Close': last_price,
-                'Volume': volume,
-                'last_time': timestamp,
-            }
-        else:
-            if remainder == 0 or (timestamp - self.nest[instrument_id]['last_time'])>= granularity:
-                self.nest[instrument_id]['Volume'] = volume - self.nest[instrument_id]['Volume']
-                self.nest[instrument_id]['Date'] = date_time
-                # print(instrument_id,self.nest[instrument_id])
-                # self.Gateway.SetData(instrument_id,self.nest[instrument_id])
-                # self.Gateway.on_bar(tick,self.nest[instrument_id])
-                self.Gateway.on_bar(tick,self.Gateway.SetData(instrument_id,self.nest[instrument_id]))
-                del self.nest[instrument_id]
-            else:
-                self.nest[instrument_id]['Date'] = date_time     
-                self.nest[instrument_id]['Close'] = last_price
-                if last_price > self.nest[instrument_id]['High']:
-                    self.nest[instrument_id]['High'] = last_price
-             
-                elif last_price < self.nest[instrument_id]['Low']:
-                    self.nest[instrument_id]['Low'] = last_price
     def OnFrontConnected(self) -> "void":
         print ("行情初始化")
         self.login()
@@ -466,21 +390,16 @@ class MdSpi(mdapi.CThostFtdcMdSpi):
         self.api.ReqUserLogin(req,self.reqid)
     def OnRspUserLogin(self, pRspUserLogin: 'CThostFtdcRspUserLoginField', pRspInfo: 'CThostFtdcRspInfoField', nRequestID: 'int', bIsLast: 'bool'):
         print (f"OnRspUserLogin, SessionID={pRspUserLogin.SessionID},ErrorID={pRspInfo.ErrorID},ErrorMsg={pRspInfo.ErrorMsg}")
-        self.api.SubscribeMarketData([id.encode('utf-8') for id in self.Gateway.symbol_lsit],len(self.Gateway.symbol_lsit))
+        # self.api.SubscribeMarketData([id.encode('utf-8') for id in symbol],len(symbol))
+        self.SubMarketData(symbol)
     def OnRtnDepthMarketData(self, pDepthMarketData: 'CThostFtdcDepthMarketDataField') -> "void":
-        # threading.Thread(target=self.Bar, args=(pDepthMarketData,self.Gateway.BarType)).start()
-        self.Bar(pDepthMarketData,self.Gateway.BarType)
-        self.Gateway.on_tick(pDepthMarketData)
-        
+        print (pDepthMarketData.LastPrice)
     def OnRspSubMarketData(self, pSpecificInstrument: 'CThostFtdcSpecificInstrumentField', pRspInfo: 'CThostFtdcRspInfoField', nRequestID: 'int', bIsLast: 'bool'):
         print ("订阅 合约")
         print ("InstrumentID=",pSpecificInstrument.InstrumentID)
-        # print ("ErrorID=",pRspInfo.ErrorID)
-        # print ("ErrorMsg=",pRspInfo.ErrorMsg)
     def connect(self):
         self.api.RegisterFront(self.md_address)
         self.api.RegisterSpi(self)
-        self.Gateway.setMDSpi(self)
         self.api.Init()      
         self.api.Join()
     def __del__(self):
@@ -489,80 +408,16 @@ class MdSpi(mdapi.CThostFtdcMdSpi):
     def SubMarketData(self, symbol):
         Req = self.api.SubscribeMarketData([id.encode('utf-8') for id in symbol],len(symbol))
         return Req
-
-# class Strategy(TAInstance):
-class Strategy():
-    def __init__(self):
-        super().__init__()
-        self.symbol_lsit = ["ni2109","sc2109","ag2109"]  #订阅合约
-        self.BarType = BarType.Min  #订阅K线周期  秒级 BarType.Time3  Time5  Time15  Time30       分钟级  BarType.Min、  Min3 、 Min5 、 Min15 、 Min30 、 Min60
-        self.data = []
-        self.position = []
-    def on_tick(self, tick):
-        pass
-    def on_bar(self, tick=None, bar=None):
-        pass
-    def on_order(self, order):
-        pass
-    def on_position(self, positions):
-        pass
-    def on_trade(self, trade):
-        pass
-    def on_account(self, account):
-        pass
-    def on_Instrument(self, Instrument):
-        pass
-    def GetPosition(self, symbol=None):
-        for i in self.position:
-            if symbol==i['合约']:
-                return i
-                break
-        else:
-            # print('该合约没有持仓')
-            Position = {"合约":0,"盈亏":0,"持仓成本":0,"总持仓":0,"今仓":0,"昨仓":0,"方向":"None","开仓价":0}
-            return Position
-    def GetData(self, symbol=None):
-        for i in self.data:
-            if symbol==i[0]["symbol"]:
-                return i
-                # break
-        else:
-             print('该合约没有数据')
-             return None
-    def SetData(self, symbol=None,Bar=None):
-        for i in self.data:
-            if symbol==i[0]["symbol"]:
-                i[-1]["data"].append(Bar)
-                return i
-                break
-        else:
-             print('该合约没有数据')
-             new_Data = []
-             new_Bar = []
-             new_Bar.append(Bar)
-         
-             new_ohlcv = {}
-             new_ohlcv['symbol'] = symbol
-             new_ohlcv['data'] = new_Bar
-             new_Data.append(new_ohlcv)
-             self.data.append(new_Data)
-             return new_Data            
-###############################################################################################
-    def send(self, symbol, Direction, Offset, Price, volume, PriceType):   #报单
-        self.TD_Api.send(symbol, Direction, Offset, Price, volume, PriceType) 
-    def SubMarketData(self, sub_lsit):
-        print (sub_lsit)
-        self.MD_Api.SubMarketData(sub_lsit)
-    # @staticmethod
-    def setTraderSpi(self, TDApi):
-        self.TD_Api = TDApi
-    # @staticmethod    
-    def setMDSpi(self, MDApi):
-        self.MD_Api = MDApi
-
 class CTP():
-    def __init__(self,Strategy_demo):
-        self.Strategy_demo = Strategy_demo
+    def __init__(self):
+        self.name = "python交易员"
     def Login(self, setting):
-        tdspi=TdSpi(setting,self.Strategy_demo)
-        mdspi=MdSpi(setting,self.Strategy_demo)
+        tdspi=TdSpi(setting)
+        mdspi=MdSpi(setting)
+if __name__ == '__main__':
+    # Config 配置模板 
+    symbol = ["ni2103","rb2105","ag2102","IF2103","IC2103","i2109","jm2109"]
+    Config = {'brokerid':'9999', 'userid':'223456', 'password':'******', 'appid':'simnow_client_test', 'auth_code':'0000000000000000', 'product_info':'python dll', 'td_address':'tcp://180.168.146.187:10130', 'md_address':'tcp://180.168.146.187:10131'}
+    # Config = {'brokerid':'9999', 'userid':'23456', 'password':'*****', 'appid':'simnow_client_test', 'auth_code':'0000000000000000', 'product_info':'python dll', 'td_address':'tcp://180.168.146.187:10101', 'md_address':'tcp://180.168.146.187:10111'} 
+    t = CTP()
+    t.Login(Config) 
