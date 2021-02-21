@@ -2,7 +2,7 @@
 关注公众号: Ctp接口量化
 
 """
-from _ctp import *
+from Ctpapi import *
 from Config import Config
 class MACDStrategy(Strategy):
     def __init__(self):
