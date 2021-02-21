@@ -3,57 +3,66 @@ from Ctpapi import *
 class MACDStrategy(Strategy):
     def __init__(self):
         super().__init__()
-        self.symbol_lsit = ["ni2103","rb2105","ag2102"]  #订阅合约
-        self.bar_time = 5  #K线周期以秒计
-        self.volume = 1  #下单手数
-    def on_tick(self, tick=None):
-        print(tick.LastPrice)  
-    def on_bar(self, tick=None, bar=None):
+        self.symbol_lsit = ["ni2103","rb2105","ag2102","IF2103","IC2103","i2109","jm2109"]  #订阅合约
+        self.BarType = BarType.Time3  #订阅K线周期  秒级 BarType.Time3  Time5  Time15  Time30       分钟级  BarType.Min、  Min3 、 Min5 、 Min15 、 Min30 、 Min60
+        self.volume = {"ni2103":5,"rb2105":3,"ag2102":2,"IF2103":3,"IC2103":2,"i2109":3,"jm2109":2}  #下单手数
+    def on_trade(self, trade):
+        print(trade)
+    # def on_tick(self, tick=None):
+        # print(tick.InstrumentID,tick.LastPrice)  
+    def on_bar(self, tick=None, Bar=None):
         symbol = tick.InstrumentID   #合约代码
         Bid = tick.BidPrice1    #买价
         Ask = tick.AskPrice1    #卖价
         LastPrice = tick.LastPrice  #最新价
-        print(symbol)
-        print(bar)
-        行情 = self.Get_data(symbol)[0]["data"]
-        if len(行情) <= 35:   # 小于35 条 退出 
-            return                    # 退出 
-        # 指标 = TAInstance()             # 创建 指标库 对象
-        # # K,D,J  = 指标.KDJ(行情) # 取KDJ指标数组
-        dif,dea,macd  = self.MACD(行情) # 取MACD指标数组
-
-        close,High,low = self.tick(行情)      # 取收盘价数组 # 获取最新价格（卖价）
-        print("K线收盘价",close[-1])     # 取最新K线 收盘价
-        print("dif",dif[-10:])        # 显示10个 dif 元素
-        print("dea",dea[-10:])         # 显示10个 dea 元素
-        print("macd",macd[-10:])        # 显示10个 macd 元素
-        Posion = self.GetPosition(symbol)   # 通过  GetPosition() 函数 查询持仓情况
-        print(Posion)    
-        # 开多单
-        if Posion["手数"] == 0 and dif[-1]>0 and dif[-2]<0 or Posion["手数"] == 0 and dif[-1]>dea[-1] and dif[-2] < dea[-2] and dea[-1] > 0:
-            print("MACD策略开多Buy")
-            最低价 = min(low[-10:])
-            最高价 = max(High[-10:])
-            self.Buy(symbol, Ask, self.volume, 最低价, Ask+(Ask-最低价)*3)      # 合约, 价格, 手数, 止损=None, 止盈=None   本地设置 止损 止盈 等用函数           
-        # # 开空单
-        if Posion["手数"] == 0 and dif[-1]<0 and dif[-2]>0 or Posion["手数"] == 0 and dif[-1]<dea[-1] and dif[-2] > dea[-2] and dea[-1] < 0:
-            print("MACD策略开空Short")
-            最低价 = min(low[-10:])
-            最高价 = max(High[-10:])
-            self.Short(symbol, Bid, self.volume, 最高价, Bid-(最高价-Bid)*3)   # 合约, 价格, 手数, 止损=None, 止盈=None   本地设置 止损 止盈 等用函数        
-        # # 平多单
-        if Posion["方向"]=='Buy' and LastPrice < Posion["止损"] and Posion["止损"] != 0 or Posion["方向"]=='Buy' and LastPrice > Posion["止盈"] and Posion["止盈"] != 0 or Posion["方向"]=='Buy' and LastPrice > Posion["价格"] and dif[-1]<dea[-1] and dif[-2] > dea[-2]:   #Posion["方向"]=='Buy' and dif[-1]<dea[-1] and dif[-2] > dea[-2]
-            print("MACD策略平多Sell")
-            self.Sell(symbol,Bid, Posion["手数"])     # 合约, 价格, 手数        
-        # # 平空单
-        if Posion["方向"]=='Sell' and LastPrice > Posion["止损"] and Posion["止损"] != 0 or Posion["方向"]=='Sell' and LastPrice < Posion["止盈"] and Posion["止盈"] != 0 or Posion["方向"]=='Sell' and LastPrice < Posion["价格"] and dif[-1]>dea[-1] and dif[-2] < dea[-2]: #Posion["方向"]=='Sell' and dif[-1]>dea[-1] and dif[-2] < dea[-2] 
-            print("MACD策略平空Cover")
-            self.Cover(symbol,Ask, Posion["手数"])    # 合约, 价格, 手数
-
+        # print(Bar[0]["symbol"]) #合约
+        kline = Bar[0]["data"]    # K 线数据
+        if len(kline) <= 35:   # 小于35 条 退出 
+            return   
+        K,D,J  = self.KDJ(kline) # 取KDJ指标数组
+        UP,MB,DN  = self.BOLL(kline) # 取BOLL指标数组
+        EMA  = self.EMA(kline,60) # 取EMA指标数组
+        RSI  = self.RSI(kline) # 取RSI指标数组
+        MA1  = self.MA(kline,30) # 取MA指标数组Channels
+        MA2  = self.MA(kline,60) # 取MA指标数组Channels
+        dif,dea,macd  = self.MACD(kline) # 取MACD指标数组
+        close,High,low = self.tick(kline)      # 取收盘价数组 # 获取最新价格（卖价）
+        # print("K线收盘价",close[-1])     # 取最新K线 收盘价
+        # print("dif",dif[-2:])        # 显示10个 dif 元素
+        # print("dea",dea[-2:])         # 显示10个 dea 元素
+        # print("macd",macd[-2:])        # 显示10个 macd 元素
+        # print("K",K[-2:])        # 显示10个 dif 元素
+        # print("D",D[-2:])         # 显示10个 dea 元素
+        # print("J",J[-2:])        # 显示10个 macd 元素
+        # print("EMA",EMA[-2:])        # 显示10个 dif 元素
+        # print("RSI",RSI[-2:])         # 显示10个 dea 元素
+        # print("MA1",MA1[-2:])        # 显示10个 macd 元素 
+        # print("MA2",MA2[-2:])        # 显示10个 macd 元素         
+        # print("UP",UP[-2:])        # 显示10个 dif 元素
+        # print("MB",MB[-2:])         # 显示10个 dea 元素
+        # print("DN",DN[-2:])        # 显示10个 macd 元素
+        # print(self.Get_Position(symbol))
+        Position = self.GetPosition(symbol)
+        print(Position)
+        # print(self.GetData(symbol))
+        # # 开多单
+        if Position["方向"]=="None" and dif[-1]>dea[-1] and dif[-2] < dea[-2] and dea[-1] > 0:
+            print("MACD策略开多")
+            self.send(symbol, DirectionType.Buy, OffsetType.Open, Ask, self.volume[symbol], OrderType.Limit)  # # OrderType.FOK   OrderType.FAK   OrderType.Market
+        # # # 开空单
+        if Position["方向"]=="None" and dif[-1]<dea[-1] and dif[-2] > dea[-2] and dea[-1] < 0:
+            print("MACD策略开空")
+            self.send(symbol, DirectionType.Sell, OffsetType.Open, Bid, self.volume[symbol], OrderType.Limit)   # # OffsetType.Open   OffsetType.Close   OffsetType.CloseToday  OffsetType.CloseYesterday
+        # # # 平多单
+        if Position["方向"]=="Long" and dif[-1]<dea[-1] and dif[-2] > dea[-2]:
+            self.send(symbol, DirectionType.Sell, OffsetType.Close, Bid, self.volume[symbol], OrderType.Limit)         
+        # # # 平空单        
+        if Position["方向"]=="Short" and dif[-1]>dea[-1] and dif[-2] < dea[-2]:
+            self.send(symbol, DirectionType.Buy, OffsetType.Close, Ask, self.volume[symbol], OrderType.Limit)
 if __name__ == '__main__':
-    配置 = {'经纪商代码':'9999', '用户名':'123456', '密码':'******', '产品名称':'simnow_client_test', '授权编码':'0000000000000000', '产品信息':'python dll', '交易服务器':'tcp://180.168.146.187:10130', '行情服务器':'tcp://180.168.146.187:10131'}
-    # 配置 = {'经纪商代码':'9999', '用户名':'23456', '密码':'******', '产品名称':'simnow_client_test', '授权编码':'0000000000000000', '产品信息':'python dll', '交易服务器':'tcp://180.168.146.187:10101', '行情服务器':'tcp://180.168.146.187:10111'}
-    登陆 = CTP(MACDStrategy())
-    登陆.Login(配置)
-    
+    # Config 配置模板
+    Config = {'brokerid':'9999', 'userid':'123456', 'password':'******', 'appid':'simnow_client_test', 'auth_code':'0000000000000000', 'product_info':'python dll', 'td_address':'tcp://180.168.146.187:10130', 'md_address':'tcp://180.168.146.187:10131'}
+    # Config = {'brokerid':'9999', 'userid':'127922', 'password':'******', 'appid':'simnow_client_test', 'auth_code':'0000000000000000', 'product_info':'python dll', 'td_address':'tcp://180.168.146.187:10101', 'md_address':'tcp://180.168.146.187:10111'} 
+    t = CTP(MACDStrategy())
+    t.Login(Config)   
     
