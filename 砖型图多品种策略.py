@@ -9,7 +9,7 @@ class MACDStrategy(Strategy):
     def __init__(self):
         super().__init__()
         self.symbol_lsit = ["m2105","ni2104","rb2105","ag2106","IF2103","IC2103","i2105","j2105"]  #订阅合约
-        self.bar_time = BarType.Min  #订阅K线周期  秒级 BarType.Time3  Time5  Time15  Time30       分钟级  BarType.Min、  Min3 、 Min5 、 Min15 、 Min30 、 Min60
+        self.BarType = BarType.Min  #订阅K线周期  秒级 BarType.Time3  Time5  Time15  Time30       分钟级  BarType.Min、  Min3 、 Min5 、 Min15 、 Min30 、 Min60
         self.tick_time = 10  #砖型图tick数
         self.volume = {
         "m2105":{"总持仓":3,"止损":0,"止盈":0,"移动止损":0},
